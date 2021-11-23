@@ -9,6 +9,7 @@ from pyqtgraph.Qt import QtWidgets, QtCore, mkQApp
 import itertools
 import matplotlib
 from matplotlib import axes
+import PySide6  # noqa:F401 we need this so its added to the requirements.txt
 
 
 def main(argv):

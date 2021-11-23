@@ -1,3 +1,7 @@
+from dfplt.backends.pg.lineplot import Lineplot as pgLinePlot
+import pyqtgraph as pg
+
+
 from pandas.plotting._matplotlib.boxplot import (  # noqa:F401
     LinePlot,
     BoxPlot,
@@ -55,7 +59,8 @@ class HexBinPlot(LinePlot):
     pass
 
 
-PLOT_CLASSES = {
+PLOT_CLASSES = {"line": pgLinePlot}
+PLOT_CLASSES_FALLBACK = {
     "line": LinePlot,
     "bar": BarPlot,
     "barh": BarhPlot,
@@ -70,7 +75,18 @@ PLOT_CLASSES = {
 
 
 def plot(data, kind, **kwargs):
-    return PLOT_CLASSES[kind](data, **kwargs)
+    fb = kwargs.pop("_fallbackBackend", False)
+    if fb:
+        kwargs.pop("x")
+        kwargs.pop("y")
+    if (kind in PLOT_CLASSES) and not fb:
+        _ = pg.mkQApp()
+        return PLOT_CLASSES[kind](data, **kwargs)
+    else:
+        plot_obj = PLOT_CLASSES_FALLBACK[kind](data, **kwargs)
+        plot_obj.generate()
+        plot_obj.draw()  # pragma: no cover
+        return plot_obj.result  # pragma: no cover
 
 
 # we add the entry point dynamically, so it also works in editable mode:
@@ -79,7 +95,7 @@ def _addEntryPoint():
     import pkg_resources
 
     d = pkg_resources.Distribution(__file__)
-    ep = pkg_resources.EntryPoint.parse("dplt = dplt:backends:pg", dist=d)
+    ep = pkg_resources.EntryPoint.parse("dfplt = dfplt.backends:pg", dist=d)
     d._ep_map = {"pandas_plotting_backends": {"pg": ep}}
     pkg_resources.working_set.add(d, "pg")
 

@@ -1,5 +1,3 @@
-from x2df import x2df
-
 # we need this import so that the backend gets registered
 from dfplt import backends  # noqa: F401
 
@@ -40,8 +38,13 @@ def main(argv):
         parser.print_help()
         return 0
 
-    plots = (plot(x) for x in args["srcs"])
-    plots = [x for x in itertools.chain.from_iterable(plots) if x]
+    # we only need x2df for the commandline interface.
+    from x2df import x2df
+
+    dfs = itertools.chain.from_iterable(x2df.load(src) for src in args["srcs"])
+
+    plots = (plot(df) for df in dfs)
+    plots = [x for x in plots if x]
 
     if not plots:
         parser.print_help()
@@ -52,10 +55,8 @@ def main(argv):
     return 0
 
 
-def plot(src):
-    dfs = x2df.load(src)
-    plots = [df.plot() for df in dfs]
-    return plots
+def plot(df):
+    return df.plot()
 
 
 def show(plots, block=True):

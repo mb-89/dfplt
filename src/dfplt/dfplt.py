@@ -1,3 +1,5 @@
+from dfplt import examplegallery
+
 # we need this import so that the backend gets registered
 from dfplt import backends  # noqa: F401
 
@@ -5,8 +7,7 @@ import argparse
 from .__metadata__ import __version__
 from pyqtgraph.Qt import QtWidgets, QtCore, mkQApp
 import itertools
-import matplotlib
-from matplotlib import axes
+
 import PySide6  # noqa:F401 we need this so its added to the requirements.txt
 
 
@@ -28,12 +29,24 @@ def main(argv):
     )
 
     parser.add_argument("-v", "--version", action="store_true", help="prints version")
+    parser.add_argument(
+        "--examples", action="store_true", help="shows the example gallery"
+    )
     args = argv[1:]
     args = vars(parser.parse_args(args))
 
     if args["version"]:
         print(__version__)
         return 0
+    if args["examples"]:
+        app = mkQApp()
+        w = QtWidgets.QMainWindow()
+        w.setCentralWidget(examplegallery.Examplegallery())
+        w.resize(600, 400)
+        if args["nonblock"]:
+            QtCore.QTimer.singleShot(100, app.quit)
+        w.show()
+        return app.exec()
     if args["?"] or not args["srcs"]:
         parser.print_help()
         return 0
@@ -60,10 +73,6 @@ def plot(df):
 
 
 def show(plots, block=True):
-    anyMatPlotLib = any(isinstance(x, axes._subplots.SubplotBase) for x in plots)
-    if anyMatPlotLib:
-        matplotlib.pyplot.show(block=block)
-
     widgets = [x for x in plots if isinstance(x, QtWidgets.QWidget)]
     if widgets:
         app = mkQApp()

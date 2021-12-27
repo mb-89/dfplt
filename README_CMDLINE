@@ -1,5 +1,5 @@
 usage: parses given glob-style paths and plots any found dataframes. Plots all the given dataframes
-       [-h] [-?] [--nonblock] [-v] [srcs ...]
+       [-h] [-?] [--nonblock] [-v] [--examples] [srcs ...]
 
 positional arguments:
   srcs           glob-style paths that will be parsed
@@ -10,3 +10,4 @@ optional arguments:
   --nonblock     set to true to open figures in nonblocking mode for debugging
                  or batch exports.
   -v, --version  prints version
+  --examples     shows the example gallery

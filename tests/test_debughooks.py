@@ -10,6 +10,5 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_hook_stepresponses1():
-    plts = dfplt.plot("example_stepresponses1")
-    dfplt.show(plts, block=True)
+def test_examples():
+    assert dfplt.main(["test", "--examples"]) == 0

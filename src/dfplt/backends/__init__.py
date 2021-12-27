@@ -7,7 +7,9 @@ from dfplt.backends import pg  # noqa: F401
 
 @functools.cache
 def getAvailableBackends():
-    beL = ["dfplt"]
+    beL = [
+        "dfplt"
+    ]  # , "matplotlib"] lets remove matplotlib until it properly supports pyside6
     df = pd.DataFrame()
     for (
         be

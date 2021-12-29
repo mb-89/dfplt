@@ -19,6 +19,11 @@ def main():
     unsorted = open(dst, "r").readlines()
     unsorted = [x.replace("==", ">=") for x in unsorted if not x.startswith("x2df")]
     unsorted.append("x2df @ git+https://github.com/mb-89/x2df\n")
+
+    # for now we need to load pyqtgraph from github, it is missing a fix on pip
+    unsorted = [x for x in unsorted if not x.startswith("pyqtgraph")]
+    unsorted.append("pyqtgraph @ git+https://github.com/pyqtgraph/pyqtgraph\n")
+
     sortedlst = sorted(unsorted)
     open(dst, "w").write("".join(sortedlst))
 

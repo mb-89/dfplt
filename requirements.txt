@@ -1,7 +1,8 @@
 PySide6>=6.2.2.1
+numpy>=1.19.3
 pandas>=1.2.4
 pipreqs>=0.4.10
-pyqtgraph>=0.12.3
+pyqtgraph @ git+https://github.com/pyqtgraph/pyqtgraph
 pytest>=6.2.5
 pytest_qt>=4.0.2
 x2df @ git+https://github.com/mb-89/x2df

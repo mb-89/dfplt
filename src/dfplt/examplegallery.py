@@ -4,6 +4,8 @@ from dfplt.backends import getAvailableBackends
 
 
 class Examplegallery(QtWidgets.QWidget):
+    plotReady = QtCore.Signal()
+
     def __init__(self):
         super().__init__()
         la = QtWidgets.QHBoxLayout()
@@ -58,6 +60,8 @@ class Examplegallery(QtWidgets.QWidget):
         if self.plt:
             self.plt.setHidden(True)
             la.removeWidget(self.plt)
+            self.plt.deleteLater()
             self.plt = None
         self.plt = w
         la.addWidget(w)
+        self.plotReady.emit()

@@ -5,6 +5,6 @@
 * to build the wheel-file for this package, run "py -m build" in this folder. 
 
 * uses black and flake8 for linting (they are also part of the pre-commit hook)
-* uses pytest for testing (#TODO: make pytest part of pre-push and maybe even github actions)
+* uses pytest for testing
 
 See also: https://www.youtube.com/watch?v=DhUpxWjOhME

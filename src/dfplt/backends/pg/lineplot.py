@@ -3,6 +3,10 @@ import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtWidgets
 import numpy as np
 from functools import partial
+import tempfile
+import os.path as op
+from IPython.display import Image, display
+from IPython import get_ipython
 
 numValLen = 8
 
@@ -11,6 +15,11 @@ def getFixedLenString(flt, L=numValLen):
 
     s = np.format_float_scientific(flt, precision=L - 5, trim="-")
     return s
+
+
+ipython = get_ipython()
+if ipython:
+    ipython.run_line_magic("gui", "qt")
 
 
 class Lineplot(plotWidget):
@@ -22,26 +31,68 @@ class Lineplot(plotWidget):
         la.setSpacing(0)
         la.setContentsMargins(0, 0, 0, 0)
         self.setLayout(la)
-        self.mainPlot = pgLineplot(data, kwargs)
+        self.mainPlotFun = partial(pgLineplot, data, kwargs)
 
-        toolbar = QtWidgets.QHBoxLayout()
-        toolbar.setSpacing(0)
-        toolbar.setContentsMargins(0, 0, 0, 0)
+        self.toolbar = QtWidgets.QHBoxLayout()
+        self.toolbar.setSpacing(0)
+        self.toolbar.setContentsMargins(0, 0, 0, 0)
+        self.toolbar.addStretch()
 
-        la.addLayout(toolbar)
+        la.addLayout(self.toolbar)
+
+        self.addButtons()
+        self.drawPlt()
+
+    def drawPlt(self):
+        la = self.layout()
+        if la.count() > 1:
+            self.mainPlot.hide()
+            la.removeWidget(self.mainPlot)
+            self.mainPlot.deleteLater()
+
+        self.mainPlot = self.mainPlotFun()
         la.addWidget(self.mainPlot)
+        self.toggleCursors(False)
 
-        self.cursorButton = QtWidgets.QPushButton("C")
-        self.cursorButton.setMaximumWidth(19)
+    def addButtons(self):
+        self.addCursButton()
+        self.addBWButton()
+        self.addCpyButton()
+
+    def addBWButton(self):
+        self.bwBlack = True
+        self.bwButton = QtWidgets.QPushButton("BW")
+        self.bwButton.setMaximumWidth(35)
+        self.bwButton.setCheckable(True)
+        self.bwButton.toggled.connect(self.toggleBW)
+        self.toolbar.addWidget(self.bwButton)
+
+    def addCursButton(self):
+        self.cursorButton = QtWidgets.QPushButton("Cu")
+        self.cursorButton.setMaximumWidth(35)
         self.cursorButton.setCheckable(True)
         self.cursorButton.toggled.connect(self.toggleCursors)
+        self.toolbar.addWidget(self.cursorButton)
 
-        toolbar.addStretch()
-        toolbar.addWidget(self.cursorButton)
+    def addCpyButton(self):
+        self.cpyButton = QtWidgets.QPushButton("Cp")
+        self.cpyButton.setMaximumWidth(35)
+        self.cpyButton.clicked.connect(self.toClipboard)
+        self.toolbar.addWidget(self.cpyButton)
 
     def toggleCursors(self, tgl):
         self.mainPlot.toggleCursors(tgl)
         self.cursorToggle.emit(tgl)
+
+    def toClipboard(self):
+        self.mainPlot.toClipboard()
+
+    def toggleBW(self):
+        setWhite = self.bwBlack
+        self.bwBlack = not self.bwBlack
+        pg.setConfigOption("background", "w" if setWhite else "k")
+        pg.setConfigOption("foreground", "k" if setWhite else "w")
+        self.drawPlt()
 
 
 class pgLineplot(pg.GraphicsLayoutWidget):
@@ -52,6 +103,15 @@ class pgLineplot(pg.GraphicsLayoutWidget):
 
     def toggleCursors(self, tgl):
         self.plt.toggleCursors(tgl)
+
+    def toClipboard(self):
+        pix = self.grab()
+        pg.mkQApp().clipboard().setPixmap(pix)
+        if ipython:
+            with tempfile.TemporaryDirectory() as td:
+                path = op.join(td, "tmp.png")
+                pix.save(path, "PNG")
+                display(Image(filename=path))
 
 
 class pgPlotWithCursors(pg.PlotItem):

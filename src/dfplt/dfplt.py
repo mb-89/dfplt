@@ -1,4 +1,5 @@
 from dfplt import examplegallery
+import dfplt
 
 # we need this import so that the backend gets registered
 from dfplt import backends  # noqa: F401
@@ -8,22 +9,22 @@ from .__metadata__ import __version__
 from pyqtgraph.Qt import QtWidgets, QtCore, mkQApp
 import itertools
 from pandas import DataFrame
-from collections.abc import Iterable
 
 import PySide6  # noqa:F401 we need this so its added to the requirements.txt
 
 from IPython import get_ipython
 
 ipython = get_ipython()
-if ipython:
+if ipython:  # pragma: no cover #no idea how to test this yet
     ipython.run_line_magic("gui", "qt")
 
 
 def main(argv):
     parser = argparse.ArgumentParser(
-        "parses given glob-style paths and plots any found dataframes."
-        + " Plots all the given dataframes",
+        dfplt.__name__,
+        description=dfplt.__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        add_help=False,
     )
     parser.add_argument("srcs", nargs="*", help="glob-style paths that will be parsed")
     parser.add_argument(
@@ -73,7 +74,7 @@ def main(argv):
 def load(srcs):
     from x2df import x2df
 
-    if isinstance(srcs, str) or not isinstance(srcs, Iterable):
+    if isinstance(srcs, str):
         srcs = [srcs]
     dfs = list(itertools.chain.from_iterable(x2df.load(src) for src in srcs))
     return dfs
@@ -83,7 +84,7 @@ def plot(dfOrSrc):
     if isinstance(dfOrSrc, DataFrame):
         return dfOrSrc.plot()
     # if we are here, the input was not a dataframe:
-    dfs = load([dfOrSrc])
+    dfs = load(dfOrSrc)
     plots = (plot(df) for df in dfs)
     plots = [x for x in plots if x]
     return plots
@@ -92,7 +93,7 @@ def plot(dfOrSrc):
 def show(plots, block=True):
     widgets = [x for x in plots if isinstance(x, QtWidgets.QWidget)]
     if widgets:
-        if ipython:
+        if ipython:  # pragma: no cover #no idea how to test this yet
             for w in widgets:
                 w.show()
             return

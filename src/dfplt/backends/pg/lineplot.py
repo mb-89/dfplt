@@ -18,7 +18,7 @@ def getFixedLenString(flt, L=numValLen):
 
 
 ipython = get_ipython()
-if ipython:
+if ipython:  # pragma: no cover #dont know how to test this yet
     ipython.run_line_magic("gui", "qt")
 
 
@@ -92,6 +92,7 @@ class Lineplot(plotWidget):
         self.bwBlack = not self.bwBlack
         pg.setConfigOption("background", "w" if setWhite else "k")
         pg.setConfigOption("foreground", "k" if setWhite else "w")
+        self.cursorButton.setDown(False)
         self.drawPlt()
 
 
@@ -107,7 +108,7 @@ class pgLineplot(pg.GraphicsLayoutWidget):
     def toClipboard(self):
         pix = self.grab()
         pg.mkQApp().clipboard().setPixmap(pix)
-        if ipython:
+        if ipython:  # pragma: no cover #no idea how to test this yet
             with tempfile.TemporaryDirectory() as td:
                 path = op.join(td, "tmp.png")
                 pix.save(path, "PNG")

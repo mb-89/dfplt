@@ -1,11 +1,11 @@
-usage: parses given glob-style paths and plots any found dataframes. Plots all the given dataframes
-       [-h] [-?] [--nonblock] [-v] [--examples] [srcs ...]
+usage: dfplt [-?] [--nonblock] [-v] [--examples] [srcs ...]
+
+Package that parses given glob-style paths and plots any found dataframes.
 
 positional arguments:
   srcs           glob-style paths that will be parsed
 
 optional arguments:
-  -h, --help     show this help message and exit
   -?             show this help message and exit
   --nonblock     set to true to open figures in nonblocking mode for debugging
                  or batch exports.

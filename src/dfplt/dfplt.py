@@ -10,7 +10,7 @@ from pyqtgraph.Qt import QtWidgets, QtCore, mkQApp
 import itertools
 from pandas import DataFrame
 
-import PySide6  # noqa:F401 we need this so its added to the requirements.txt
+# import PySide6  # noqa:F401 we need this so its added to the requirements.txt
 
 from IPython import get_ipython
 
@@ -91,6 +91,8 @@ def plot(dfOrSrc):
 
 
 def show(plots, block=True):
+    if isinstance(plots, QtWidgets.QWidget):
+        plots = [plots]
     widgets = [x for x in plots if isinstance(x, QtWidgets.QWidget)]
     if widgets:
         if ipython:  # pragma: no cover #no idea how to test this yet

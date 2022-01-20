@@ -48,7 +48,7 @@ def test_blackwhite(qtbot):
         eg.ex.setCurrentText("examples_stepresponse1")
 
     qtbot.mouseClick(eg.plt.bwButton, QtCore.Qt.MouseButton.LeftButton)
-    assert not eg.plt.bwBlack
+    assert not eg.plt.bgBlack
 
 
 def test_copy(qtbot):

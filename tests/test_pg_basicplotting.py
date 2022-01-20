@@ -19,7 +19,10 @@ def test_plotting_via_main(qtbot):
         qtbot.addWidget(plt)
         plt.close()
 
-    QtCore.QTimer.singleShot(0, closewin)
+    t = QtCore.QTimer()
+    t.setInterval(100)
+    t.timeout.connect(closewin)  # do it like this bc we cant rely on timing
+    t.start()
     dfplt.main(["test", "example_stepresponses1"])
 
 

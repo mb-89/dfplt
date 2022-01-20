@@ -10,7 +10,7 @@ from pyqtgraph.Qt import QtWidgets, QtCore, mkQApp
 import itertools
 from pandas import DataFrame
 
-# import PySide6  # noqa:F401 we need this so its added to the requirements.txt
+import PySide6  # noqa:F401 we need this so its added to the requirements.txt
 
 from IPython import get_ipython
 

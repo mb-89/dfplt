@@ -31,7 +31,10 @@ class Lineplot(plotWidget):
         la.setSpacing(0)
         la.setContentsMargins(0, 0, 0, 0)
         self.setLayout(la)
-        self.mainPlotFun = partial(pgLineplot, data, kwargs)
+        self.bgBlack = True
+        pg.setConfigOption("background", "k")
+        pg.setConfigOption("foreground", "w")
+        self.mainPlotFun = partial(pgLineplot, data, self, kwargs)
 
         self.toolbar = QtWidgets.QHBoxLayout()
         self.toolbar.setSpacing(0)
@@ -60,7 +63,6 @@ class Lineplot(plotWidget):
         self.addCpyButton()
 
     def addBWButton(self):
-        self.bwBlack = True
         self.bwButton = QtWidgets.QPushButton("BW")
         self.bwButton.setMaximumWidth(35)
         self.bwButton.setCheckable(True)
@@ -88,18 +90,18 @@ class Lineplot(plotWidget):
         self.mainPlot.toClipboard()
 
     def toggleBW(self):
-        setWhite = self.bwBlack
-        self.bwBlack = not self.bwBlack
+        setWhite = self.bgBlack
+        self.bgBlack = not self.bgBlack
         pg.setConfigOption("background", "w" if setWhite else "k")
         pg.setConfigOption("foreground", "k" if setWhite else "w")
-        self.cursorButton.setDown(False)
+        self.cursorButton.setChecked(False)
         self.drawPlt()
 
 
 class pgLineplot(pg.GraphicsLayoutWidget):
-    def __init__(self, data, kwargs):
+    def __init__(self, data, parent, kwargs):
         super().__init__()
-        self.plt = pgPlotWithCursors(data, kwargs)
+        self.plt = pgPlotWithCursors(data, parent, kwargs)
         self.addItem(self.plt, row=0, col=0)
 
     def toggleCursors(self, tgl):
@@ -116,20 +118,28 @@ class pgLineplot(pg.GraphicsLayoutWidget):
 
 
 class pgPlotWithCursors(pg.PlotItem):
-    def __init__(self, data, kwargs):
+    def __init__(self, data, parent, kwargs):
         super().__init__()
-        A = 65
+        A = 255
         xdata = data.index.values
         xname = data.index.name if data.index.name else "idx"
         self.showGrid(1, 1, int(0.75 * 255))
+        black = parent.bgBlack
+        blackforeground = pg.mkPen(0, 0, 0, A)
+        blackbackground = pg.mkBrush(48, 48, 48, A)
+
+        whiteforeground = pg.mkPen(0, 0, 0, A)
+        whitebackground = pg.mkBrush(178, 177, 179, A)
+
         self.customlegend = pgLegendWithVals(
             xname,
-            pen=pg.mkPen(255, 255, 255, A),
-            brush=pg.mkBrush(0, 0, 255, A),
+            pen=blackforeground if black else whiteforeground,
+            brush=blackbackground if black else whitebackground,
             offset=(70, 20),
         )
         self.customlegend.setParentItem(self)
-        self.addCursors()
+        self.customlegend.setZValue(9999)
+        self.addCursors(black)
 
         L = len(data.columns)
         self.setLabel("bottom", xname)
@@ -153,10 +163,10 @@ class pgPlotWithCursors(pg.PlotItem):
         else:
             self.customlegend.remCursorCols()
 
-    def addCursors(self):
+    def addCursors(self, blackBG):
         # if we have no plugins, the cursor btn is part of a different plot widget
-        self.c1 = pgRelPosCursor(1 / 3, label="C1")
-        self.c2 = pgRelPosCursor(2 / 3, label="C2")
+        self.c1 = pgRelPosCursor(1 / 3, label="C1", blackBg=blackBG)
+        self.c2 = pgRelPosCursor(2 / 3, label="C2", blackBg=blackBG)
         self.addItem(self.c1)
         self.addItem(self.c2)
         self.cursors = dict((idx, c) for idx, c in enumerate([self.c1, self.c2]))
@@ -302,12 +312,13 @@ class pgLegendWithVals(pg.LegendItem):
 
 
 class pgRelPosCursor(pg.InfiniteLine):
-    def __init__(self, startposrel, vertical=False, label=None):
+    def __init__(self, startposrel, blackBg=True, vertical=False, label=None):
         super().__init__(
             angle=90 if not vertical else 0,
             movable=True,
             label=label,
-            labelOpts={"position": 0.95},
+            labelOpts={"position": 0.95, "color": "yellow" if blackBg else "red"},
+            pen="yellow" if blackBg else "red",
         )
         self.setVisible(False)
         self.startposrel = startposrel

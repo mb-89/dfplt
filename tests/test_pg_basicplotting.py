@@ -23,6 +23,16 @@ def test_plotting_via_main(qtbot):
     dfplt.main(["test", "example_stepresponses1"])
 
 
-def test_plotting_df_directly():
+def test_plotting_df_directly(qtbot):
     dfs = dfplt.load("example_stepresponses1")
+    w = dfplt.plot(dfs[0])
     assert dfs
+    app = mkQApp()
+
+    def closewin():
+        plt = [x for x in app.topLevelWidgets() if isinstance(x, Lineplot)][0]
+        qtbot.addWidget(plt)
+        plt.close()
+
+    QtCore.QTimer.singleShot(0, closewin)
+    dfplt.show(w)

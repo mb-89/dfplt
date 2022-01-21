@@ -1,20 +1,12 @@
 from dfplt.backends.pg.common import plotWidget
+from dfplt.backends.pg.plotElements import pgPlotWithCursors, FFTsubplot
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtWidgets
-import numpy as np
 from functools import partial
 import tempfile
 import os.path as op
 from IPython.display import Image, display
 from IPython import get_ipython
-
-numValLen = 8
-
-
-def getFixedLenString(flt, L=numValLen):
-
-    s = np.format_float_scientific(flt, precision=L - 5, trim="-")
-    return s
 
 
 ipython = get_ipython()
@@ -61,6 +53,7 @@ class Lineplot(plotWidget):
         self.addCursButton()
         self.addBWButton()
         self.addCpyButton()
+        self.addFFTButton()
 
     def addBWButton(self):
         self.bwButton = QtWidgets.QPushButton("BW")
@@ -82,8 +75,35 @@ class Lineplot(plotWidget):
         self.cpyButton.clicked.connect(self.toClipboard)
         self.toolbar.addWidget(self.cpyButton)
 
+    def addFFTButton(self):
+        self.fftButton = QtWidgets.QPushButton("fft")
+        self.fftButton.setMaximumWidth(50)
+        self.fftButton.setCheckable(True)
+        self.fftButton.toggled.connect(self.toggleFFT)
+        self.toolbar.addWidget(self.fftButton)
+
+    def toggleFFT(self, newtglval):
+        self.destroySubplot()
+        self.mainPlot.setROIvisible(newtglval)
+        if not newtglval:
+            return
+        self.mainPlot.ci.layout.setRowStretchFactor(1, 2)
+        fftplot = FFTsubplot(self.mainPlot)
+        self.mainPlot.addItem(fftplot, row=1, col=0)
+
+    def destroySubplot(self):
+        existingPlot = self.mainPlot.ci.rows.get(1, {}).get(0)
+        if existingPlot:
+            self.mainPlot.ci.layout.setRowStretchFactor(1, 0)
+            existingPlot.setVisible(False)
+            existingPlot.deleteLater()
+            self.mainPlot.ci.removeItem(existingPlot)
+
     def toggleCursors(self, tgl):
         self.mainPlot.toggleCursors(tgl)
+        existingSubPlot = self.mainPlot.ci.rows.get(1, {}).get(0)
+        if existingSubPlot:
+            existingSubPlot.toggleCursors(tgl)
         self.cursorToggle.emit(tgl)
 
     def toClipboard(self):
@@ -95,7 +115,13 @@ class Lineplot(plotWidget):
         pg.setConfigOption("background", "w" if setWhite else "k")
         pg.setConfigOption("foreground", "k" if setWhite else "w")
         self.cursorButton.setChecked(False)
+        self.fftButton.setChecked(False)
         self.drawPlt()
+
+    def mainROIchanged(self, roi):
+        existingSubPlot = self.mainPlot.ci.rows.get(1, {}).get(0)
+        if existingSubPlot:
+            existingSubPlot.updateRange(roi)
 
 
 class pgLineplot(pg.GraphicsLayoutWidget):
@@ -103,6 +129,9 @@ class pgLineplot(pg.GraphicsLayoutWidget):
         super().__init__()
         self.plt = pgPlotWithCursors(data, parent, kwargs)
         self.addItem(self.plt, row=0, col=0)
+        self.plt.roiChanged.connect(parent.mainROIchanged)
+        self.ci.layout.setRowStretchFactor(0, 1)
+        self.ci.layout.setRowStretchFactor(1, 0)
 
     def toggleCursors(self, tgl):
         self.plt.toggleCursors(tgl)
@@ -116,238 +145,5 @@ class pgLineplot(pg.GraphicsLayoutWidget):
                 pix.save(path, "PNG")
                 display(Image(filename=path))
 
-
-class pgPlotWithCursors(pg.PlotItem):
-    def __init__(self, data, parent, kwargs):
-        super().__init__()
-        A = 255
-        xdata = data.index.values
-        xname = data.index.name if data.index.name else "idx"
-        self.showGrid(1, 1, int(0.75 * 255))
-        black = parent.bgBlack
-        blackforeground = pg.mkPen(0, 0, 0, A)
-        blackbackground = pg.mkBrush(48, 48, 48, A)
-
-        whiteforeground = pg.mkPen(0, 0, 0, A)
-        whitebackground = pg.mkBrush(178, 177, 179, A)
-
-        self.customlegend = pgLegendWithVals(
-            xname,
-            pen=blackforeground if black else whiteforeground,
-            brush=blackbackground if black else whitebackground,
-            offset=(70, 20),
-        )
-        self.customlegend.setParentItem(self)
-        self.customlegend.setZValue(9999)
-        self.addCursors(black)
-
-        L = len(data.columns)
-        self.setLabel("bottom", xname)
-        for idx, yname in enumerate(data.columns):
-            self.plot(
-                x=xdata,
-                y=data[yname],
-                name=yname,
-                pen=(idx + 1, L),
-                autoDownsample=True,
-                clipToView=True,
-            )
-
-    def toggleCursors(self, tgl):
-        for k, v in self.cursors.items():
-            v.setVisible(tgl)
-        if tgl:
-            self.customlegend.addCursorCols()
-            for idx, c in enumerate(self.cursors.values()):
-                pg.QtCore.QTimer.singleShot(0, partial(self.updateCursorVals, [c]))
-        else:
-            self.customlegend.remCursorCols()
-
-    def addCursors(self, blackBG):
-        # if we have no plugins, the cursor btn is part of a different plot widget
-        self.c1 = pgRelPosCursor(1 / 3, label="C1", blackBg=blackBG)
-        self.c2 = pgRelPosCursor(2 / 3, label="C2", blackBg=blackBG)
-        self.addItem(self.c1)
-        self.addItem(self.c2)
-        self.cursors = dict((idx, c) for idx, c in enumerate([self.c1, self.c2]))
-        self.proxies = [
-            pg.SignalProxy(
-                c.sigPositionChanged, rateLimit=30, slot=self.updateCursorVals
-            )
-            for c in self.cursors.values()
-        ]
-        for k, v in self.cursors.items():
-            v.idx = k
-
-    def updateCursorVals(self, c):
-        if not self.customlegend.expanded:
-            return
-        c = c[0]
-        try:
-            xval = c.pos()[0]
-        except RuntimeError:  # pragma: no cover # can happen during debugging
-            return
-        tmp = [xval]
-        for cuidx, cu in enumerate(self.curves):
-            idx = np.searchsorted(cu.xData, xval, side="left")
-            L = len(cu.yData)
-            yval = cu.yData[max(0, min(idx, L - 1))]
-            tmp.append(yval)
-        self.customlegend.setVals(c.idx, tmp)
-
-    def plot(self, *args, **kwargs):
-        p = super().plot(*args, **kwargs)
-        self.customlegend.addItem(p, kwargs.get("name", "unnamed"))
-        return p
-
-
-class pgLegendWithVals(pg.LegendItem):
-    def __init__(self, xname, *args, **kwargs):
-        kwargs["colCount"] = 1
-        super().__init__(*args, **kwargs)
-        self.layout.addItem(pg.LabelItem("Name"), 0, 1)
-        self.layout.addItem(pg.LabelItem(" X"), 1, 0)
-        self.layout.addItem(pg.LabelItem(xname), 1, 1)
-        self.expanded = False
-        self.w0 = None
-        self.w1 = None
-
-    def setVals(self, cursorIdx, vals):
-        for vidx, v in enumerate(vals):
-            targetItem = self.layout.itemAt(vidx + 1, cursorIdx + 2)
-            targetItem._val = v
-
-            targetItem.setText(getFixedLenString(v))
-        if (
-            self.layout.itemAt(1, 2)._val is not None
-            and self.layout.itemAt(1, 3)._val is not None
-        ):
-            self.calcDerivativeVals()
-
-    def calcDerivativeVals(self):
-        for row in range(1, self.layout.rowCount()):
-            v0 = self.layout.itemAt(row, 2)._val
-            v1 = self.layout.itemAt(row, 3)._val
-            delta = v1 - v0
-            deltainv = 0 if delta == 0 else 1 / delta
-            t = self.layout.itemAt(row, 4)
-            t._val = delta
-            t.setText(getFixedLenString(delta))
-            t = self.layout.itemAt(row, 5)
-            t._val = deltainv
-            t.setText(getFixedLenString(deltainv))
-
-    def _addItemToLayout(self, sample, label):
-        col = self.layout.columnCount()
-        row = self.layout.rowCount()
-        # in the original code, the next two lines are not commented out
-        # if row:
-        #    row -= 1
-        # we need this bc we injected more rows and cols than in the original code
-        if row == 2:
-            col = 0
-        else:
-            col = 2
-
-        nCol = self.columnCount * 2
-
-        for col in range(0, nCol, 2):
-            # FIND RIGHT COLUMN
-            # if i dont add the row>=...,  get QGraphicsGridLayout::itemAt errors
-            if row >= self.layout.rowCount() or not self.layout.itemAt(row, col):
-                break
-
-        self.layout.addItem(sample, row, col)
-        self.layout.addItem(label, row, col + 1)
-        # Keep rowCount in sync with the number of rows if items are added
-        self.rowCount = max(self.rowCount, row + 1)
-
-    def addCursorCols(self):
-        if self.expanded:
-            return
-        self.expanded = True
-        if self.w0 is None:
-            self.w0 = self.layout.geometry().width()
-
-        self.layout.addItem(pg.LabelItem("C1"), 0, 2)
-        self.layout.addItem(pg.LabelItem("C2"), 0, 3)
-        self.layout.addItem(pg.LabelItem("Δ"), 0, 4)
-        self.layout.addItem(pg.LabelItem("1/Δ"), 0, 5)
-
-        for col in range(2, 6):
-            self.layout.setColumnMaximumWidth(col, numValLen * 7)
-            self.layout.setColumnMinimumWidth(col, numValLen * 7)
-
-        if self.w1 is not None:
-            self.setMaximumWidth(self.w1)
-
-        for row in range(1, self.layout.rowCount()):
-            for col in range(2, 6):
-                item = pg.LabelItem("")
-                item._val = None
-                self.layout.addItem(item, row, col)
-
-    def remCursorCols(self):
-        if not self.expanded:
-            return
-        self.expanded = False
-        if self.w1 is None:
-            self.w1 = self.layout.geometry().width()
-
-        for col in range(2, 6):
-            item = self.layout.itemAt(0, col)
-            item.setVisible(False)
-            item.deleteLater()
-            self.layout.removeItem(item)
-
-        for row in range(1, self.layout.rowCount()):
-            for col in range(2, 6):
-                item = self.layout.itemAt(row, col)
-                item.setVisible(False)
-                item.deleteLater()
-                self.layout.removeItem(item)
-
-        if self.w0 is not None:
-            self.setMaximumWidth(self.w0)
-
-
-class pgRelPosCursor(pg.InfiniteLine):
-    def __init__(self, startposrel, blackBg=True, vertical=False, label=None):
-        super().__init__(
-            angle=90 if not vertical else 0,
-            movable=True,
-            label=label,
-            labelOpts={"position": 0.95, "color": "yellow" if blackBg else "red"},
-            pen="yellow" if blackBg else "red",
-        )
-        self.setVisible(False)
-        self.startposrel = startposrel
-        self.currposrel = startposrel
-        self.vertical = vertical
-
-    def setVisible(self, vis):
-        if vis:
-            self.setRelPos(self.startposrel)
-        super().setVisible(vis)
-
-    def setPos(self, pos):
-        try:
-            range = self.getViewBox().viewRange()
-            x0, x1 = range[0] if not self.vertical else range[1]
-            dx = x1 - x0
-            self.currposrel = (pos - x0) / dx
-        except AttributeError:
-            pass
-        super().setPos(pos)
-
-    def setRelPos(self, relpos=None):
-        if relpos is None:
-            relpos = self.currposrel
-        range = self.getViewBox().viewRange()
-        x0, x1 = range[0] if not self.vertical else range[1]
-        dx = x1 - x0
-        self.setValue(x0 + relpos * dx)
-
-    def viewTransformChanged(self):
-        self.setRelPos()
-        return super().viewTransformChanged()
+    def setROIvisible(self, vis):
+        self.plt.roi.setVisible(vis)

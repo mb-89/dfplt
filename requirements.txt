@@ -6,4 +6,5 @@ pipreqs>=0.4.10
 pyqtgraph @ git+https://github.com/pyqtgraph/pyqtgraph
 pytest>=6.2.5
 pytest_qt>=4.0.2
+scipy>=1.5.4
 x2df @ git+https://github.com/mb-89/x2df

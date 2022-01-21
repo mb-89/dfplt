@@ -1,6 +1,5 @@
 from dfplt import examplegallery, dfplt
 from pyqtgraph.Qt import QtCore, mkQApp
-from dfplt.backends.pg.lineplot import Lineplot
 
 
 def test_fallback(qtbot):
@@ -13,15 +12,9 @@ def test_fallback(qtbot):
 
 def test_plotting_via_main(qtbot):
     app = mkQApp()
-
-    def closewin():
-        plt = [x for x in app.topLevelWidgets() if isinstance(x, Lineplot)][0]
-        qtbot.addWidget(plt)
-        plt.close()
-
     t = QtCore.QTimer()
     t.setInterval(100)
-    t.timeout.connect(closewin)  # do it like this bc we cant rely on timing
+    t.timeout.connect(app.exit)  # do it like this bc we cant rely on timing
     t.start()
     dfplt.main(["test", "example_stepresponses1"])
 
@@ -31,11 +24,8 @@ def test_plotting_df_directly(qtbot):
     w = dfplt.plot(dfs[0])
     assert dfs
     app = mkQApp()
-
-    def closewin():
-        plt = [x for x in app.topLevelWidgets() if isinstance(x, Lineplot)][0]
-        qtbot.addWidget(plt)
-        plt.close()
-
-    QtCore.QTimer.singleShot(0, closewin)
+    t = QtCore.QTimer()
+    t.setInterval(100)
+    t.timeout.connect(app.exit)  # do it like this bc we cant rely on timing
+    t.start()
     dfplt.show(w)

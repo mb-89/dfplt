@@ -7,6 +7,7 @@ positional arguments:
 
 optional arguments:
   -?             show this help message and exit
-  --nonblock     set to true to open figures in nonblocking mode for debugging or batch exports.
+  --nonblock     set to true to open figures in nonblocking mode for debugging
+                 or batch exports.
   -v, --version  prints version
   --examples     shows the example gallery

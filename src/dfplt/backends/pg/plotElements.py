@@ -2,6 +2,8 @@ import pyqtgraph as pg
 import numpy as np
 from functools import partial
 from scipy import fft
+from pyqtgraph import functions as fn
+from scipy import signal
 
 numValLen = 8
 alpha = 255
@@ -115,13 +117,15 @@ class pgPlotWithCursors(pg.PlotItem):
         self.roi = RelPosLinearRegion(self, black, self.roiChanged.emit)
         self.roi.setRelRegion((0.4, 0.6))
         self.roi.setVisible(False)
-        self.roi.setZValue(-9999)
+        # self.roi.setZValue(-9999)
 
     def addCursors(self, blackBG):
         self.c1 = pgRelPosCursor(1 / 3, label="C1", blackBg=blackBG)
         self.c2 = pgRelPosCursor(2 / 3, label="C2", blackBg=blackBG)
         self.addItem(self.c1)
         self.addItem(self.c2)
+        self.c1.setZValue(9999)
+        self.c2.setZValue(9999)
         self.cursors = dict((idx, c) for idx, c in enumerate([self.c1, self.c2]))
         self.proxies = [
             pg.SignalProxy(
@@ -272,6 +276,7 @@ class pgRelPosCursor(pg.InfiniteLine):
             label=label,
             labelOpts={"position": 0.95, "color": "yellow" if blackBg else "red"},
             pen="yellow" if blackBg else "red",
+            hoverPen="yellow" if not blackBg else "red",
         )
         self.setVisible(False)
         self.startposrel = startposrel
@@ -352,3 +357,247 @@ class FFTsubplot(pgPlotWithCursors):
             yf = 2.0 / N * np.abs(fft.fft(y)[0 : N // 2])
             xf = np.linspace(0.0, 1.0 / (2.0 * T), N // 2)
             self.curves[idx].setData(x=xf[1:], y=yf[1:])
+
+
+class SpecImageItem(pg.ImageItem):
+    geometryChanged = pg.QtCore.Signal()
+
+
+class Specsubplot(pg.graphicsItems.GraphicsLayout.GraphicsLayout):
+    winlenbase = 256
+    winlenmaxrel = 8
+    redrawSig = pg.QtCore.Signal()
+
+    def __init__(self, src):
+        super().__init__()
+        self.src = src
+        self.Sxx = None
+        self.range = [0, 0]
+        self.calcbusy = False
+        # view = self.addViewBox(row=1, col=1)
+        # view.setAspectLocked(True)
+        self.pi = self.addPlot(row=1, col=1)
+        self.pi.setTitle("Spec")
+        self.pi.setLabel("bottom", "freq")
+        self.pi.setLabel("left", "time")
+        self.img = pg.ImageItem()
+        self.pi.addItem(self.img)
+        # view.addItem(self.pi)
+        self.addItem(self.buildHist(), row=0, col=1)
+        self.redrawproxy = pg.SignalProxy(
+            self.redrawSig, rateLimit=3, slot=self._redraw
+        )
+        self.pi.getViewBox().invertY(True)
+        self.addCursors(False)
+        self.layout.setRowStretchFactor(1, 7)
+        self.layout.setColumnStretchFactor(1, 7)
+        self.target.setVisible(False)
+
+    def addCursors(self, blackBG):
+        self.ch = pgRelPosCursor(
+            1 / 3, label="{value:0.2f} (A)", vertical=False, blackBg=blackBG
+        )
+        self.cv = pgRelPosCursor(
+            2 / 3, label="{value:0.2f} (B)", vertical=True, blackBg=blackBG
+        )
+        self.pi.addItem(self.ch)
+        self.pi.addItem(self.cv)
+        self.ch.setZValue(9999)
+        self.cv.setZValue(9999)
+        self.cursors = dict((idx, c) for idx, c in enumerate([self.ch, self.cv]))
+        self.proxies = [
+            pg.SignalProxy(
+                c.sigPositionChanged, rateLimit=60, slot=self.updateCursorVals
+            )
+            for c in self.cursors.values()
+        ]
+        for k, v in self.cursors.items():
+            v.idx = k
+        self.target = pg.TargetItem(
+            pos=(self.cv.value(), self.ch.value()),
+            size=0,
+            label=self.getZ,
+            labelOpts={"offset": (20, -20), "color": "red"},
+        )
+        self.pi.addItem(self.target)
+        self.xsection = self.addPlot(row=2, col=1)
+        self.ysection = self.addPlot(row=1, col=0)
+
+        self.xsection.setTitle("z vals along (B)")
+        self.ysection.setTitle("z vals along (A)")
+        self.xsection.setLabel("bottom", "freq")
+        self.xsection.setLabel("left", "z")
+        self.xsection.setXLink(self.pi)
+        self.ysection.setYLink(self.pi)
+        self.ysection.setLabel("bottom", "z")
+        self.ysection.setLabel("left", "time")
+        self.xsection.setVisible(False)
+        self.ysection.setVisible(False)
+
+    def _redraw(self):
+        y0, y1 = self.range
+        dy = y1 - y0
+        if not dy:
+            return
+        calcDone = self.calc()
+        if not calcDone:
+            return
+
+        self.img.setImage(self.Sxx)
+        self.img.resetTransform()
+
+        y0, y1 = self.range
+        dy = y1 - y0
+        x0, dx = self.f[0], self.f[-1]
+
+        self.img.setRect(pg.QtCore.QRectF(x0, y0, dx, dy))
+        self.hist.setLevels(np.min(self.Sxx), np.percentile(self.Sxx, 99))
+        for x in self.pi.axes:
+            ax = self.pi.getAxis(x)
+            ax.setZValue(1)
+        self.pi.setLimits(yMin=y0, yMax=y0 + dy, xMin=y0, xMax=x0 + dx)
+
+    def calc(self):
+        if self.calcbusy:
+            return False
+        self.calcbusy = True
+
+        range = self.range
+        col = self.src.plt.curves[0]
+        Y = col.yData
+        T = col.xData
+        mask = np.logical_and(T >= range[0], T <= range[1])
+        T = T[mask]
+        Y = Y[mask]
+        L = len(T)
+        newt0t1 = [T[0], T[-1]]
+        self.range = newt0t1
+        self.fs = (T[-1] - T[0]) / len(T)
+
+        self.f, self.t, self.Sxx = signal.spectrogram(
+            Y,
+            1 / ((T[-1] - T[0]) / L),
+            scaling="spectrum",
+            mode="magnitude",
+            nperseg=self.winlenbase * 4,
+        )
+        self.Sxx *= 2.0
+
+        self.calcbusy = False
+        return True
+
+    def updateRange(self, roi):
+        self.range = roi.getRegion()
+        self.redrawSig.emit()
+
+    def toggleCursors(self, tgl):
+        for k, v in self.cursors.items():
+            v.setVisible(tgl)
+        self.xsection.setVisible(tgl)
+        self.ysection.setVisible(tgl)
+        self.target.setVisible(tgl)
+
+    def buildHist(self):
+        self.hist = HoriHist()
+        self.hist.setImageItem(self.img)
+        return self.hist
+
+    def getZ(self, x, y):
+        if self.Sxx is None:
+            return
+        xrel = min(np.searchsorted(self.f, x), len(self.f) - 1)
+        yrel = min(np.searchsorted(self.t, y - self.range[0]), len(self.t) - 1)
+        zval = self.Sxx[xrel, yrel]
+
+        self.xsection.clear()
+        self.xsection.plot(x=self.f, y=self.Sxx[:, yrel])
+        self.xsection.setLimits(xMin=0, xMax=self.f[-1])
+        self.ysection.clear()
+        self.ysection.plot(y=self.t + self.range[0], x=self.Sxx[xrel, :])
+        self.ysection.setLimits(yMin=self.range[0], yMax=self.range[1])
+        self.ysection.getViewBox().invertY(True)
+        return f"z: {zval:.2f}"
+
+    def updateCursorVals(self, c):
+        self.target.setPos((self.ch.value(), self.cv.value()))
+
+
+class HoriHist(pg.HistogramLUTItem):
+    def __init__(
+        self, image=None, fillHistogram=True, rgbHistogram=False, levelMode="mono"
+    ):
+        pg.GraphicsWidget.__init__(self)
+        self.lut = None
+        self.imageItem = lambda: None  # fake a dead weakref
+        self.levelMode = levelMode
+        self.rgbHistogram = rgbHistogram
+
+        self.layout = pg.QtWidgets.QGraphicsGridLayout()
+        self.setLayout(self.layout)
+        self.layout.setContentsMargins(1, 1, 1, 1)
+        self.layout.setSpacing(0)
+        self.vb = pg.ViewBox(parent=self)
+        self.vb.setMaximumHeight(20)
+        self.vb.setMinimumHeight(20)
+        self.vb.setMouseEnabled(x=False, y=True)
+
+        self.gradient = pg.GradientEditorItem()
+        self.gradient.setOrientation("top")
+        self.gradient.loadPreset("viridis")
+
+        self.gradient.setFlag(self.gradient.ItemStacksBehindParent)
+        self.vb.setFlag(self.gradient.ItemStacksBehindParent)
+        self.layout.addItem(self.gradient, 0, 0)
+        self.layout.addItem(self.vb, 1, 0)
+        self.axis = pg.AxisItem(
+            "bottom", linkView=self.vb, maxTickLength=-10, parent=self
+        )
+        self.layout.addItem(self.axis, 2, 0)
+
+        self.regions = [pg.LinearRegionItem([0, 1], "vertical", swapMode="block")]
+        for region in self.regions:
+            region.setZValue(1000)
+            self.vb.addItem(region)
+            region.lines[0].addMarker("<|", 0.5)
+            region.lines[1].addMarker("|>", 0.5)
+            region.sigRegionChanged.connect(self.regionChanging)
+            region.sigRegionChangeFinished.connect(self.regionChanged)
+        self.region = self.regions[0]
+
+        add = pg.QtGui.QPainter.CompositionMode_Plus
+        self.plots = [
+            pg.PlotCurveItem(pen=(200, 200, 200, 100)),  # mono
+            pg.PlotCurveItem(pen=(255, 0, 0, 100), compositionMode=add),  # r
+            pg.PlotCurveItem(pen=(0, 255, 0, 100), compositionMode=add),  # g
+            pg.PlotCurveItem(pen=(0, 0, 255, 100), compositionMode=add),  # b
+            pg.PlotCurveItem(pen=(200, 200, 200, 100), compositionMode=add),  # a
+        ]
+        self.plot = self.plots[0]
+        for plot in self.plots:
+            self.vb.addItem(plot)
+        self.fillHistogram(fillHistogram)
+
+        self.range = None
+        self.gradient.sigGradientChanged.connect(self.gradientChanged)
+        self.vb.sigRangeChanged.connect(self.viewRangeChanged)
+
+    def paint(self, p, *args):
+        if self.levelMode != "mono":
+            return
+
+        pen = self.region.lines[0].pen
+        rgn = self.getLevels()
+        p1 = self.vb.mapFromViewToItem(
+            self, pg.Point(rgn[0], self.vb.viewRect().center().y())
+        )
+        p2 = self.vb.mapFromViewToItem(
+            self, pg.Point(rgn[1], self.vb.viewRect().center().y())
+        )
+        gradRect = self.gradient.mapRectToParent(self.gradient.gradRect.rect())
+        p.setRenderHint(pg.QtGui.QPainter.Antialiasing)
+        for pen in [fn.mkPen((0, 0, 0, 100), width=3), pen]:
+            p.setPen(pen)
+            p.drawLine(p1 - pg.Point(5, 0), gradRect.bottomLeft())
+            p.drawLine(p2 + pg.Point(5, 0), gradRect.bottomRight())
+            p.drawLine(gradRect.topLeft(), gradRect.bottomLeft())
+            p.drawLine(gradRect.topRight(), gradRect.bottomRight())

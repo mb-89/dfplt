@@ -26,6 +26,7 @@ def test_showfft(qtbot):
 
     # switch to white bg and open fft again
     qtbot.mouseClick(eg.plt.bwButton, QtCore.Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(eg.plt.cursorButton, QtCore.Qt.MouseButton.LeftButton)
     qtbot.mouseClick(eg.plt.fftButton, QtCore.Qt.MouseButton.LeftButton)
     subplt = eg.plt.mainPlot.ci.rows.get(1, {}).get(0)
     assert not subplt.src.plt.black

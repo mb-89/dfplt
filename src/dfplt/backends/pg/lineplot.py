@@ -1,5 +1,5 @@
 from dfplt.backends.pg.common import plotWidget
-from dfplt.backends.pg.plotElements import pgPlotWithCursors, FFTsubplot
+from dfplt.backends.pg.plotElements import pgPlotWithCursors, FFTsubplot, Specsubplot
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtWidgets
 from functools import partial
@@ -54,6 +54,7 @@ class Lineplot(plotWidget):
         self.addBWButton()
         self.addCpyButton()
         self.addFFTButton()
+        self.addSpecButton()
 
     def addBWButton(self):
         self.bwButton = QtWidgets.QPushButton("BW")
@@ -77,12 +78,20 @@ class Lineplot(plotWidget):
 
     def addFFTButton(self):
         self.fftButton = QtWidgets.QPushButton("fft")
-        self.fftButton.setMaximumWidth(50)
+        self.fftButton.setMaximumWidth(35)
         self.fftButton.setCheckable(True)
         self.fftButton.toggled.connect(self.toggleFFT)
         self.toolbar.addWidget(self.fftButton)
 
+    def addSpecButton(self):
+        self.specButton = QtWidgets.QPushButton("spec")
+        self.specButton.setMaximumWidth(35)
+        self.specButton.setCheckable(True)
+        self.specButton.toggled.connect(self.toggleSpec)
+        self.toolbar.addWidget(self.specButton)
+
     def toggleFFT(self, newtglval):
+        self.specButton.setChecked(False)
         self.destroySubplot()
         self.mainPlot.setROIvisible(newtglval)
         if not newtglval:
@@ -90,6 +99,20 @@ class Lineplot(plotWidget):
         self.mainPlot.ci.layout.setRowStretchFactor(1, 2)
         fftplot = FFTsubplot(self.mainPlot)
         self.mainPlot.addItem(fftplot, row=1, col=0)
+        if self.mainPlot.plt.customlegend.expanded:
+            fftplot.toggleCursors(True)
+
+    def toggleSpec(self, newtglval):
+        self.fftButton.setChecked(False)
+        self.destroySubplot()
+        self.mainPlot.setROIvisible(newtglval)
+        if not newtglval:
+            return
+        self.mainPlot.ci.layout.setRowStretchFactor(1, 3)
+        layout = Specsubplot(self.mainPlot)
+        self.mainPlot.addItem(layout, row=1, col=0)
+        if self.mainPlot.plt.customlegend.expanded:
+            layout.toggleCursors(True)
 
     def destroySubplot(self):
         existingPlot = self.mainPlot.ci.rows.get(1, {}).get(0)
@@ -116,6 +139,7 @@ class Lineplot(plotWidget):
         pg.setConfigOption("foreground", "k" if setWhite else "w")
         self.cursorButton.setChecked(False)
         self.fftButton.setChecked(False)
+        self.specButton.setChecked(False)
         self.drawPlt()
 
     def mainROIchanged(self, roi):
